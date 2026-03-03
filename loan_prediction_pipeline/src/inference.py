@@ -9,6 +9,7 @@ def run_inference(
     df: pd.DataFrame,
     model,
     output_path: str,
+    threshold: float = 0.5,
 ) -> pd.DataFrame:
     """Execute les predictions et sauvegarde les resultats.
 
@@ -16,6 +17,7 @@ def run_inference(
         df: DataFrame avec features (et optionnellement target).
         model: Modele CatBoost entraine.
         output_path: Chemin de sortie (.csv ou .parquet).
+        threshold: Seuil de decision pour la classe positive (defaut 0.5).
 
     Returns:
         DataFrame avec predictions et probabilites.
@@ -31,8 +33,8 @@ def run_inference(
     y_true = df["target"] if "target" in df.columns else None
 
     # Predictions
-    y_pred = model.predict(X)
     y_proba = model.predict_proba(X)[:, 1]
+    y_pred = (y_proba >= threshold).astype(int)
 
     # Construction du DataFrame de sortie
     output_data = {

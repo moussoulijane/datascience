@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 
 import pandas as pd
@@ -159,16 +160,28 @@ def run_infer(args):
     )
     print("    Modele HIGH charge")
 
+    # Chargement des seuils optimaux
+    thr_path = f"models/{args.revenu_treshold}_thresholds.json"
+    if os.path.exists(thr_path):
+        with open(thr_path) as f:
+            thresholds = json.load(f)
+        thr_low = thresholds["low"]
+        thr_high = thresholds["high"]
+        print(f"    Seuils charges : LOW={thr_low:.2f} | HIGH={thr_high:.2f}")
+    else:
+        thr_low, thr_high = 0.5, 0.5
+        print("    Seuils non trouves, utilisation du seuil par defaut (0.5)")
+
     # Inferences
     print("\n  Execution des predictions...")
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
 
     out_low = args.output.replace(".csv", "_low.parquet")
-    run_inference(df_low, model_low, out_low)
+    run_inference(df_low, model_low, out_low, threshold=thr_low)
 
     out_high = args.output.replace(".csv", "_high.parquet")
-    run_inference(df_high, model_high, out_high)
+    run_inference(df_high, model_high, out_high, threshold=thr_high)
 
     print("\n" + "=" * 70)
     print("  INFERENCE TERMINEE")

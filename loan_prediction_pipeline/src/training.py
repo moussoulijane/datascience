@@ -4,11 +4,7 @@ import os
 
 import pandas as pd
 from catboost import CatBoostClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-)
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 
 from config.config import (
@@ -46,8 +42,8 @@ def split_training_data(
         (df["target"] == 0) & (df["revenu_principal"] > revenu_treshold)
     ]
 
-    df_low = pd.concat([df_pos, df_neg_low], ignore_index=True)
-    df_high = pd.concat([df_pos, df_neg_high], ignore_index=True)
+    df_low = pd.concat([df_pos, df_neg_low])
+    df_high = pd.concat([df_pos, df_neg_high])
 
     print(f"\n  Separation des donnees :")
     print(
@@ -173,8 +169,8 @@ def _train_single_model(
         print("  Aucune feature categorielle (modele tout numerique)")
         valid_cat_features = None
 
-    # Gestion du desequilibre de classes
-    neg, pos = (y_train == 0).sum(), (y_train == 1).sum()
+    # Gestion du desequilibre de classes (calculé sur la population complète)
+    neg, pos = (y == 0).sum(), (y == 1).sum()
     scale_pos_weight = neg / pos
 
     print(f"\n  Balance des classes :")

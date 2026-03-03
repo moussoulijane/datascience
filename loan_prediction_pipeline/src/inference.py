@@ -38,7 +38,7 @@ def run_inference(
     output_data = {
         "id_client": ids,
         "target_pred": y_pred,
-        "proba_souscription": y_proba,
+        "proba_pred": y_proba,
     }
 
     if y_true is not None:
@@ -54,7 +54,6 @@ def run_inference(
     else:
         output_df.to_csv(output_path, index=False)
 
-    print(f"  Resultats sauvegardes -> {output_path}")
-    print(f"   {len(output_df):,} predictions")
+    print(f"results saved to {output_path}")
 
     return output_df

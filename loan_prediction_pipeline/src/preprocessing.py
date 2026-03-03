@@ -1,63 +1,36 @@
 """Nettoyage des donnees et creation de features de base."""
 
-import numpy as np
 import pandas as pd
 
 
-def preprocess(df: pd.DataFrame) -> pd.DataFrame:
-    """Nettoie les donnees et cree des features calculees.
+def preprocess(df):
+    """Nettoie les donnees et cree des features calculees."""
+    # Fill numeric NaNs
+    df['count_simul'] = df['count_simul'].fillna(0)
+    df['count_simul_mois_n_1'] = df['count_simul_mois_n_1'].fillna(0)
+    df['age'] = df['age'].fillna(0)
+    df['mensualite_immo'] = df['mensualite_immo'].fillna(0)
 
-    Etapes:
-        1. Remplir les NaN numeriques par 0.
-        2. Convertir les colonnes jour_* (string avec virgule -> float).
-        3. Convertir les colonnes avec virgules (total_mensualite_actif, etc.).
-        4. Creer des features calculees (taux endettement, etc.).
+    # Convert jour_* columns (string with comma -> float)
+    jour_cols = [c for c in df.columns if c.startswith('jour_')]
+    df[jour_cols] = (
+        df[jour_cols]
+        .apply(lambda col: col.str.replace(",", ".", regex=False).astype(float))
+        .fillna(0)
+    )
 
-    Args:
-        df: DataFrame brut.
+    # Convert comma-formatted numeric columns
+    df = df.assign(
+        total_mensualite_actif=df['total_mensualite_actif']
+            .str.replace(',', '.', regex=False).astype(float),
+        duree_restante_ponderee=df['duree_restante_ponderee']
+            .str.replace(',', '.', regex=False).astype(float),
+    )
 
-    Returns:
-        DataFrame nettoye avec features calculees.
-    """
-    print("\n  Preprocessing des donnees...")
+    # Derived features (second assign so first results are available)
+    df = df.assign(
+        total_mensualite_conso_immo=df['total_mensualite_actif'] + df['mensualite_immo'],
+        taux_endettement=lambda x: x['total_mensualite_conso_immo'] / (1 + x['revenu_principal']),
+    )
 
-    # 1. Remplir les NaN numeriques
-    for col in ["count_simul", "count_simul_mois_n_1", "age", "mensualite_immo"]:
-        if col in df.columns:
-            df[col] = df[col].fillna(0)
-
-    # 2. Convertir colonnes jour_* (string -> float)
-    jour_cols = [c for c in df.columns if c.startswith("jour_")]
-    print(f"   Conversion de {len(jour_cols)} colonnes temporelles...")
-
-    for col in jour_cols:
-        if df[col].dtype == object:
-            df[col] = (
-                df[col]
-                .str.replace(",", ".", regex=False)
-                .astype(float)
-            )
-        df[col] = df[col].fillna(0)
-
-    # 3. Convertir colonnes avec virgules
-    for col in ["total_mensualite_actif", "duree_restante_ponderee"]:
-        if col in df.columns and df[col].dtype == object:
-            df[col] = (
-                df[col]
-                .str.replace(",", ".", regex=False)
-                .astype(float)
-            )
-
-    # 4. Creer features calculees
-    if "total_mensualite_actif" in df.columns and "mensualite_immo" in df.columns:
-        df["total_mensualite_conso_immo"] = (
-            df["total_mensualite_actif"] + df["mensualite_immo"]
-        )
-
-    if "total_mensualite_conso_immo" in df.columns and "revenu_principal" in df.columns:
-        df["taux_endettement"] = (
-            df["total_mensualite_conso_immo"] / (1 + df["revenu_principal"])
-        )
-
-    print(f"  Preprocessing termine : {df.shape}")
     return df

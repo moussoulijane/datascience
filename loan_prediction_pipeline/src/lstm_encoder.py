@@ -102,12 +102,10 @@ class LSTMEncoder:
             History object de Keras.
         """
         print("  Preparation des sequences temporelles...")
-        X_sequences = self._prepare_sequences(df)
+        X_sequences = self._prepare_sequences(df)  # (n, L)
 
         print("  Normalisation des donnees...")
-        X_flat = X_sequences.reshape(-1, self.sequence_length)
-        X_normalized_flat = self.scaler.fit_transform(X_flat)
-        X_normalized = X_normalized_flat.reshape(-1, self.sequence_length, 1)
+        X_normalized = self.scaler.fit_transform(X_sequences).reshape(-1, self.sequence_length, 1)
 
         print("  Construction de l'architecture LSTM...")
         self.model, self.encoder_model = self._build_autoencoder(
@@ -155,11 +153,9 @@ class LSTMEncoder:
         if self.encoder_model is None:
             raise ValueError("Le modele doit etre entraine avant transform()!")
 
-        X_sequences = self._prepare_sequences(df)
+        X_sequences = self._prepare_sequences(df)  # (n, L)
 
-        X_flat = X_sequences.reshape(-1, self.sequence_length)
-        X_normalized_flat = self.scaler.transform(X_flat)
-        X_normalized = X_normalized_flat.reshape(-1, self.sequence_length, 1)
+        X_normalized = self.scaler.transform(X_sequences).reshape(-1, self.sequence_length, 1)
 
         latent_features = self.encoder_model.predict(X_normalized, verbose=0)
 
@@ -186,7 +182,7 @@ class LSTMEncoder:
         """Extrait et organise les colonnes jour_* en sequences.
 
         Returns:
-            np.array de shape (n_samples, sequence_length, 1).
+            np.array de shape (n_samples, sequence_length).
 
         Raises:
             ValueError: Si aucune colonne jour_* n'est trouvee.
@@ -198,14 +194,8 @@ class LSTMEncoder:
 
         self.sequence_length = len(jour_cols)
 
-        print(f"   - Nombre de timesteps: {self.sequence_length}")
-        print(f"   - Colonnes: {jour_cols[:3]}...{jour_cols[-2:]}")
-
-        sequences = df[jour_cols].values
-        sequences = np.nan_to_num(sequences, nan=0.0)
-        sequences = sequences.reshape(-1, self.sequence_length, 1)
-
-        return sequences
+        sequences = df[jour_cols].values  # (n, L)
+        return np.nan_to_num(sequences, nan=0.0)
 
     def save(self, directory: str = "models/lstm_encoder"):
         """Sauvegarde le modele, encoder, scaler et metadonnees."""

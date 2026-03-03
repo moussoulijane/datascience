@@ -36,7 +36,6 @@ def add_balance_features(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame enrichi avec les 9 features statistiques.
     """
     jour_cols = sorted([col for col in df.columns if col.startswith("jour_")])
-    print(f"   Extraction de {len(jour_cols)} colonnes temporelles...")
 
     agg = df[jour_cols].apply(
         lambda row: pd.Series(
@@ -84,12 +83,10 @@ def add_advanced_features(
         DataFrame enrichi avec features statistiques + LSTM.
     """
     # 1. Features statistiques classiques
-    print("\n  Ajout des features statistiques classiques...")
     df = add_balance_features(df)
 
     # 2. Features LSTM (optionnel)
     if use_lstm:
-        print("\n  Ajout des features LSTM...")
 
         default_params = {
             "latent_dim": 16,
@@ -126,6 +123,5 @@ def add_advanced_features(
             lstm_features = lstm_encoder.transform(df)
 
         df = pd.concat([df, lstm_features], axis=1)
-        print(f"  {lstm_features.shape[1]} features LSTM ajoutees")
 
     return df

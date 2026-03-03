@@ -1,0 +1,13 @@
+# Data manipulation
+pandas>=1.5.0
+numpy>=1.23.0
+
+# Machine Learning
+scikit-learn>=1.2.0
+catboost>=1.1.0
+
+# Deep Learning
+tensorflow>=2.10.0
+
+# Utils
+pyarrow>=10.0.0

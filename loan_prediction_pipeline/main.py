@@ -104,6 +104,31 @@ def run_infer(args):
     print("  MODE INFERENCE")
     print("=" * 70)
 
+    # Chargement des modeles en premier pour detecter si LSTM est requis
+    print("\n  Chargement des modeles...")
+    model_low = CatBoostClassifier()
+    model_low.load_model(
+        f"models/{args.revenu_treshold}_catboost_model_low.cbm"
+    )
+    print("    Modele LOW charge")
+
+    model_high = CatBoostClassifier()
+    model_high.load_model(
+        f"models/{args.revenu_treshold}_catboost_model_high.cbm"
+    )
+    print("    Modele HIGH charge")
+
+    # Detection automatique des features LSTM dans le modele
+    model_needs_lstm = any(
+        f.startswith("lstm_feature_") for f in model_low.feature_names_
+    )
+    if model_needs_lstm and not args.use_lstm:
+        print(
+            "\n  [INFO] Le modele requiert des features LSTM : activation automatique de --use_lstm."
+        )
+        args.use_lstm = True
+
+    # Gestion du cache (valide seulement si les features correspondent)
     if os.path.exists(PROCESSED_INFER_PATH):
         df = pd.read_parquet(PROCESSED_INFER_PATH)
         has_lstm = any(c.startswith("lstm_feature_") for c in df.columns)
@@ -153,20 +178,6 @@ def run_infer(args):
     df_low, df_high = split_training_data(
         df, revenu_treshold=args.revenu_treshold
     )
-
-    # Chargement des modeles
-    print("\n  Chargement des modeles...")
-    model_low = CatBoostClassifier()
-    model_low.load_model(
-        f"models/{args.revenu_treshold}_catboost_model_low.cbm"
-    )
-    print("    Modele LOW charge")
-
-    model_high = CatBoostClassifier()
-    model_high.load_model(
-        f"models/{args.revenu_treshold}_catboost_model_high.cbm"
-    )
-    print("    Modele HIGH charge")
 
     # Chargement des seuils optimaux
     thr_path = f"models/{args.revenu_treshold}_thresholds.json"

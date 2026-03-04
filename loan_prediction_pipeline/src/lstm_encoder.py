@@ -239,10 +239,12 @@ class LSTMEncoder:
         instance.sequence_length = metadata["sequence_length"]
 
         instance.model = tf.keras.models.load_model(
-            os.path.join(directory, "autoencoder.h5")
+            os.path.join(directory, "autoencoder.h5"),
+            compile=False,
         )
         instance.encoder_model = tf.keras.models.load_model(
-            os.path.join(directory, "encoder.h5")
+            os.path.join(directory, "encoder.h5"),
+            compile=False,
         )
 
         with open(os.path.join(directory, "scaler.pkl"), "rb") as f:

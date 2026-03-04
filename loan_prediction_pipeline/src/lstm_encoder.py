@@ -47,6 +47,7 @@ class LSTMEncoder:
         self.encoder_model = None
         self.scaler = StandardScaler()
         self.sequence_length = None
+        self.jour_cols = None
 
     def _build_autoencoder(self, sequence_length: int):
         """Construit l'architecture autoencoder complet + encoder seul."""
@@ -187,10 +188,17 @@ class LSTMEncoder:
         Raises:
             ValueError: Si aucune colonne jour_* n'est trouvee.
         """
-        jour_cols = sorted([c for c in df.columns if c.startswith("jour_")])
-
-        if len(jour_cols) == 0:
-            raise ValueError("Aucune colonne 'jour_*' trouvee!")
+        if self.jour_cols is not None:
+            # Utilise exactement les colonnes vues a l'entrainement
+            jour_cols = self.jour_cols
+        else:
+            jour_cols = sorted([c for c in df.columns if c.startswith("jour_")])
+            if len(jour_cols) == 0:
+                raise ValueError("Aucune colonne 'jour_*' trouvee!")
+            # Fallback pour anciens modeles: tronquer si plus de colonnes que prevu
+            if self.sequence_length is not None and len(jour_cols) > self.sequence_length:
+                jour_cols = jour_cols[: self.sequence_length]
+            self.jour_cols = jour_cols
 
         self.sequence_length = len(jour_cols)
 
@@ -212,6 +220,7 @@ class LSTMEncoder:
             "lstm_units": self.lstm_units,
             "dropout_rate": self.dropout_rate,
             "sequence_length": self.sequence_length,
+            "jour_cols": self.jour_cols,
         }
         with open(os.path.join(directory, "metadata.pkl"), "wb") as f:
             pickle.dump(metadata, f)
@@ -237,12 +246,15 @@ class LSTMEncoder:
             dropout_rate=metadata["dropout_rate"],
         )
         instance.sequence_length = metadata["sequence_length"]
+        instance.jour_cols = metadata.get("jour_cols")  # None pour anciens modeles
 
         instance.model = tf.keras.models.load_model(
-            os.path.join(directory, "autoencoder.h5")
+            os.path.join(directory, "autoencoder.h5"),
+            compile=False,
         )
         instance.encoder_model = tf.keras.models.load_model(
-            os.path.join(directory, "encoder.h5")
+            os.path.join(directory, "encoder.h5"),
+            compile=False,
         )
 
         with open(os.path.join(directory, "scaler.pkl"), "rb") as f:

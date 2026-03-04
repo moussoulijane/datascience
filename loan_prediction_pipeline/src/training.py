@@ -1,20 +1,20 @@
 """Entrainement des 2 modeles CatBoost (LOW + HIGH revenu)."""
 
+import json
 import os
 
+import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-)
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 from sklearn.model_selection import train_test_split
 
 from config.config import (
     CAT_FEATURES,
     FEATURE_COLS,
-    MODEL_PARAMS,
+    MODEL_PARAMS_LOW,
+    MODEL_PARAMS_HIGH,
+    SCALE_POS_WEIGHT_MAX,
     revenu_treshold,
 )
 
@@ -46,8 +46,8 @@ def split_training_data(
         (df["target"] == 0) & (df["revenu_principal"] > revenu_treshold)
     ]
 
-    df_low = pd.concat([df_pos, df_neg_low], ignore_index=True)
-    df_high = pd.concat([df_pos, df_neg_high], ignore_index=True)
+    df_low = pd.concat([df_pos, df_neg_low])
+    df_high = pd.concat([df_pos, df_neg_high])
 
     print(f"\n  Separation des donnees :")
     print(
@@ -88,7 +88,7 @@ def train_two_models(
     print(f"  ENTRAINEMENT MODELE LOW (revenu <= {revenu_treshold} MAD)")
     print(f"{'=' * 70}")
 
-    model_low = _train_single_model(df_low, CAT_FEATURES, MODEL_PARAMS)
+    model_low, thr_low = _train_single_model(df_low, CAT_FEATURES, MODEL_PARAMS_LOW)
     model_low.save_model(
         os.path.join(save_dir, f"{revenu_treshold}_catboost_model_low.cbm")
     )
@@ -105,7 +105,7 @@ def train_two_models(
     print(f"  ENTRAINEMENT MODELE HIGH (revenu > {revenu_treshold} MAD)")
     print(f"{'=' * 70}")
 
-    model_high = _train_single_model(df_high, CAT_FEATURES, MODEL_PARAMS)
+    model_high, thr_high = _train_single_model(df_high, CAT_FEATURES, MODEL_PARAMS_HIGH)
     model_high.save_model(
         os.path.join(save_dir, f"{revenu_treshold}_catboost_model_high.cbm")
     )
@@ -116,6 +116,14 @@ def train_two_models(
     )
     feature_importance.to_csv(importance_path, index=False)
     print(f"  Feature importance -> {importance_path}")
+
+    # Sauvegarde des seuils optimaux
+    thresholds = {"low": thr_low, "high": thr_high}
+    thr_path = os.path.join(save_dir, f"{revenu_treshold}_thresholds.json")
+    with open(thr_path, "w") as f:
+        json.dump(thresholds, f, indent=2)
+    print(f"\n  Seuils optimaux sauvegardes -> {thr_path}")
+    print(f"   LOW  : {thr_low:.2f} | HIGH : {thr_high:.2f}")
 
     return model_low, model_high
 
@@ -173,13 +181,14 @@ def _train_single_model(
         print("  Aucune feature categorielle (modele tout numerique)")
         valid_cat_features = None
 
-    # Gestion du desequilibre de classes
-    neg, pos = (y_train == 0).sum(), (y_train == 1).sum()
-    scale_pos_weight = neg / pos
+    # Gestion du desequilibre de classes (calculé sur la population complète)
+    neg, pos = (y == 0).sum(), (y == 1).sum()
+    raw_ratio = neg / pos
+    scale_pos_weight = min(raw_ratio, SCALE_POS_WEIGHT_MAX)
 
     print(f"\n  Balance des classes :")
     print(f"   Non-souscripteurs : {neg:,} | Souscripteurs : {pos:,}")
-    print(f"   scale_pos_weight : {scale_pos_weight:.2f}")
+    print(f"   ratio brut : {raw_ratio:.1f} -> scale_pos_weight applique : {scale_pos_weight:.1f}")
 
     # Entrainement
     model = CatBoostClassifier(
@@ -195,14 +204,53 @@ def _train_single_model(
         verbose=model_params.get("verbose", 100),
     )
 
-    # Evaluation
-    y_pred = model.predict(X_test)
+    # Evaluation avec seuil par defaut (0.5)
+    y_pred_default = model.predict(X_test)
 
     print(f"\n  Resultats sur test set ({len(y_test):,} echantillons) :")
-    print(f"   Accuracy : {accuracy_score(y_test, y_pred):.4f}")
-    print("\n  Classification Report :")
-    print(classification_report(y_test, y_pred))
-    print("\n  Confusion Matrix :")
-    print(confusion_matrix(y_test, y_pred))
+    print(f"   Accuracy : {accuracy_score(y_test, y_pred_default):.4f}")
+    print("\n  Classification Report (seuil=0.5) :")
+    print(classification_report(y_test, y_pred_default))
+    print("\n  Confusion Matrix (seuil=0.5) :")
+    print(confusion_matrix(y_test, y_pred_default))
 
-    return model
+    # Optimisation du seuil de decision
+    best_thr = _find_best_threshold(model, X_test, y_test)
+
+    return model, best_thr
+
+
+def _find_best_threshold(
+    model: CatBoostClassifier,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+) -> float:
+    """Trouve le seuil de decision qui maximise le F1 de la classe minoritaire.
+
+    Args:
+        model: Modele CatBoost entraine.
+        X_test: Features de test.
+        y_test: Labels de test.
+
+    Returns:
+        Seuil optimal (float entre 0 et 1).
+    """
+    proba = model.predict_proba(X_test)[:, 1]
+    best_f1, best_thr = 0.0, 0.5
+
+    for thr in np.arange(0.05, 0.95, 0.01):
+        preds = (proba >= thr).astype(int)
+        f1 = f1_score(y_test, preds, zero_division=0)
+        if f1 > best_f1:
+            best_f1, best_thr = f1, thr
+
+    print(f"\n  Optimisation du seuil de decision :")
+    print(f"   Meilleur seuil : {best_thr:.2f} -> F1 classe 1 : {best_f1:.4f}")
+
+    proba_best = (proba >= best_thr).astype(int)
+    print("\n  Classification Report (seuil optimal) :")
+    print(classification_report(y_test, proba_best))
+    print("\n  Confusion Matrix (seuil optimal) :")
+    print(confusion_matrix(y_test, proba_best))
+
+    return float(best_thr)

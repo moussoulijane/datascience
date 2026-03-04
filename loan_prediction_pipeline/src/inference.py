@@ -1,6 +1,7 @@
 """Predictions sur nouvelles donnees."""
 
 import pandas as pd
+from sklearn.metrics import classification_report, confusion_matrix
 
 from config.config import FEATURE_COLS
 
@@ -50,12 +51,23 @@ def run_inference(
         [pd.DataFrame(output_data), X.reset_index(drop=True)], axis=1
     )
 
+    # Evaluation si labels disponibles
+    if y_true is not None:
+        print(f"\n  Performance sur donnees d'inference ({len(y_true):,} echantillons) :")
+        print(f"  Seuil applique : {threshold:.2f}")
+        print(f"\n  Distribution reelle  : {int((y_true == 0).sum()):,} negatifs | {int((y_true == 1).sum()):,} positifs")
+        print(f"  Distribution predite : {int((y_pred == 0).sum()):,} negatifs | {int((y_pred == 1).sum()):,} positifs")
+        print("\n  Classification Report :")
+        print(classification_report(y_true, y_pred))
+        print("  Confusion Matrix :")
+        print(confusion_matrix(y_true, y_pred))
+
     # Sauvegarde
     if output_path.endswith(".parquet"):
         output_df.to_parquet(output_path, index=False)
     else:
         output_df.to_csv(output_path, index=False)
 
-    print(f"results saved to {output_path}")
+    print(f"\n  Predictions sauvegardees -> {output_path}")
 
     return output_df

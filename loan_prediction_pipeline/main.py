@@ -105,9 +105,17 @@ def run_infer(args):
     print("=" * 70)
 
     if os.path.exists(PROCESSED_INFER_PATH):
-        print(f"\n  Chargement du cache : {PROCESSED_INFER_PATH}")
         df = pd.read_parquet(PROCESSED_INFER_PATH)
+        has_lstm = any(c.startswith("lstm_feature_") for c in df.columns)
+        if args.use_lstm and not has_lstm:
+            print(f"\n  Cache invalide (features LSTM manquantes), reconstruction...")
+            df = None
+        else:
+            print(f"\n  Chargement du cache : {PROCESSED_INFER_PATH}")
     else:
+        df = None
+
+    if df is None:
         print("\n  Construction de la base d'inference...")
 
         # 1. Chargement
